@@ -1,91 +1,151 @@
-# Streamlit app for exploring US economic indicators
-import os
+import logging
+import threading
+
 import streamlit as st
-from dotenv import load_dotenv
 
-load_dotenv()
+from app_config import ConfigError, load_settings
+from chat_service import ChatOutcome, ChatService, ConversationState
+from snowflake_service import (
+    MONTHLY_DATA_SQL,
+    complete_answer,
+    reserve_daily_allowance,
+)
 
-local_connection = {
-    "account": os.getenv("SNOWFLAKE_ACCOUNT"),
-    "user": os.getenv("SNOWFLAKE_USER"),
-    "password": os.getenv("SNOWFLAKE_PASSWORD"),
-    "role": os.getenv("SNOWFLAKE_ROLE"),
-    "warehouse": os.getenv("SNOWFLAKE_WAREHOUSE"),
-    "database": os.getenv("SNOWFLAKE_DATABASE"),
-    "schema": os.getenv("SNOWFLAKE_SCHEMA"),
-}
 
-if all(local_connection.values()):
-    conn = st.connection(
-        "local_snowflake",
-        type="snowflake",
-        ttl=os.getenv("SNOWFLAKE_CONNECTION_TTL"),
-        **local_connection,
+LOGGER = logging.getLogger(__name__)
+
+
+@st.cache_resource
+def get_request_semaphore(max_concurrent_requests: int):
+    return threading.BoundedSemaphore(max_concurrent_requests)
+
+
+def show_latest_metric(container, data, column, label, formatter):
+    available = data.dropna(subset=[column])
+    if not available.empty:
+        container.metric(label, formatter(available.iloc[0][column]))
+
+
+def show_outcome(result, max_question_chars):
+    messages = {
+        ChatOutcome.TOO_LONG: (
+            f"Keep your question under {max_question_chars:,} characters."
+        ),
+        ChatOutcome.UNSUPPORTED_TOPIC: (
+            "Ask in English about unemployment, CPI/inflation, or 30-year mortgage rates."
+        ),
+        ChatOutcome.DUPLICATE: "This question was already answered above.",
+        ChatOutcome.SESSION_LIMIT: "You have used all questions for this session.",
+        ChatOutcome.BUSY: "The public demo is busy. Please try again shortly.",
+        ChatOutcome.DAILY_LIMIT: (
+            "The public demo has reached today's AI allowance. Try again after 00:00 UTC."
+        ),
+        ChatOutcome.PROMPT_TOO_LARGE: (
+            "This follow-up needs too much context. Ask it as a standalone question."
+        ),
+        ChatOutcome.UNAVAILABLE: "The AI service is temporarily unavailable.",
+    }
+    if result.outcome in messages:
+        st.warning(messages[result.outcome])
+
+
+st.set_page_config(page_title="Ask the US Economy", page_icon="📊")
+
+try:
+    settings = load_settings(st.secrets)
+except (ConfigError, FileNotFoundError):
+    st.error("Application configuration is incomplete.")
+    st.stop()
+
+try:
+    connection = st.connection(
+        "snowflake", ttl=settings.app.connection_ttl_seconds
     )
-else:
-    conn = st.connection("snowflake", ttl=os.getenv("SNOWFLAKE_CONNECTION_TTL"))
-session = conn.session()
+    data = connection.query(
+        MONTHLY_DATA_SQL,
+        ttl=settings.app.data_cache_ttl_seconds,
+        show_spinner=False,
+    )
+except Exception:
+    LOGGER.exception("monthly_data_load_failed")
+    st.error("Economic data is temporarily unavailable.")
+    st.stop()
 
-st.title("\U0001f4ca Ask the US Economy")
-st.caption("Powered by Snowflake Cortex & Dynamic Tables \u2022 Data: BLS & Freddie Mac")
+st.title("📊 Ask the US Economy")
+st.caption("Powered by Snowflake Cortex • Data: BLS & Freddie Mac")
 
-# Pull latest data from our auto-refreshing Dynamic Table
-@st.cache_data(ttl=600)
-def load_data():
-    return session.sql(
-        "SELECT * FROM ECONOMIC_DASHBOARD_LIVE ORDER BY DATE DESC LIMIT 24"
-    ).to_pandas()
-
-data = load_data()
-
-# Show a quick snapshot
-col1, col2, col3 = st.columns(3)
-latest = data.dropna(subset=["UNEMPLOYMENT_RATE"]).iloc[0] if not data.empty else None
-if latest is not None:
-    col1.metric("Unemployment", f"{latest['UNEMPLOYMENT_RATE']*100:.1f}%")
-latest_cpi = data.dropna(subset=["CPI"]).iloc[0] if not data.empty else None
-if latest_cpi is not None:
-    col2.metric("CPI Index", f"{latest_cpi['CPI']:.1f}")
-latest_mort = data.dropna(subset=["MORTGAGE_RATE_30Y"]).iloc[0] if not data.empty else None
-if latest_mort is not None:
-    col3.metric("30Y Mortgage", f"{latest_mort['MORTGAGE_RATE_30Y']*100:.2f}%")
+column_one, column_two, column_three = st.columns(3)
+show_latest_metric(
+    column_one,
+    data,
+    "UNEMPLOYMENT_RATE",
+    "Unemployment",
+    lambda value: f"{value * 100:.1f}%",
+)
+show_latest_metric(
+    column_two, data, "CPI", "CPI Index", lambda value: f"{value:.1f}"
+)
+show_latest_metric(
+    column_three,
+    data,
+    "MORTGAGE_RATE_30Y",
+    "30Y Mortgage",
+    lambda value: f"{value * 100:.2f}%",
+)
 
 st.divider()
 
-# Chat interface
-if "messages" not in st.session_state:
-    st.session_state.messages = []
+if "conversation_state" not in st.session_state:
+    st.session_state.conversation_state = ConversationState()
+state = st.session_state.conversation_state
 
-for msg in st.session_state.messages:
-    with st.chat_message(msg["role"]):
-        st.markdown(msg["content"])
+for message in state.messages:
+    with st.chat_message(message["role"]):
+        st.markdown(message["content"])
 
-if prompt := st.chat_input("Ask about unemployment, inflation, or mortgage rates..."):
-    st.session_state.messages.append({"role": "user", "content": prompt})
-    with st.chat_message("user"):
-        st.markdown(prompt)
+st.caption(
+    f"Questions used: {state.chargeable_requests}/{settings.app.session_allowance}"
+)
+is_chat_disabled = (
+    state.daily_limit_reached
+    or state.chargeable_requests >= settings.app.session_allowance
+)
 
-    with st.chat_message("assistant"):
-        with st.spinner("Thinking..."):
-            llm_prompt = f"""You are a US economic data analyst. Answer using ONLY this data.
-Be concise. Cite specific numbers and dates. Always format rate value to percentage, examples: 4.1% good, _avoid_ 0.041. 
+question = st.chat_input(
+    "Ask about unemployment, inflation, or mortgage rates...",
+    disabled=is_chat_disabled,
+    max_chars=settings.app.max_question_chars,
+)
+if question:
+    data_csv = (
+        data.sort_values("MONTH", ascending=False)
+        .to_csv(index=False, date_format="%Y-%m", na_rep="")
+        .strip()
+    )
+    service = ChatService(
+        settings.app,
+        get_request_semaphore(settings.app.max_concurrent_requests),
+        reserve_daily_allowance,
+        complete_answer,
+    )
+    result = service.submit(connection.session, data_csv, state, question)
+    st.session_state.conversation_state = result.state
 
-DATA:
-{data.to_string(index=False)}
+    if result.error:
+        error_info = (
+            type(result.error),
+            result.error,
+            result.error.__traceback__,
+        )
+        LOGGER.error(
+            "chat_request_failed outcome=%s error_type=%s",
+            result.outcome.value,
+            type(result.error).__name__,
+            exc_info=error_info,
+        )
+    if result.outcome in (ChatOutcome.ANSWERED, ChatOutcome.CORTEX_ERROR):
+        st.rerun()
+    show_outcome(result, settings.app.max_question_chars)
 
-NOTES:
-- CPI: Consumer Price Index (1982-84=100). Higher = more inflation.
-- UNEMPLOYMENT_RATE: Decimal. 0.041 = 4.1%.
-- MORTGAGE_RATE_30Y: Decimal. 0.0626 = 6.26%.
-
-QUESTION: {prompt}"""
-
-            answer = session.sql(
-                "SELECT SNOWFLAKE.CORTEX.COMPLETE(?, ?)",
-                params=["mistral-large2", llm_prompt]
-            ).collect()[0][0]
-            st.markdown(answer)
-            st.session_state.messages.append({"role": "assistant", "content": answer})
-
-with st.expander("\U0001f4cb View raw data"):
+with st.expander("📋 View monthly data"):
     st.dataframe(data, use_container_width=True)

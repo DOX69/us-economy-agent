@@ -1,21 +1,20 @@
-import os
-
-from dotenv import load_dotenv
 from snowflake.snowpark import Session
 from snowflake.snowpark import functions as F
 from snowflake.snowpark.types import DoubleType
 
+from app_config import load_local_settings
+
 # -- 1. Connect to Snowflake ------------------------------------------------
-load_dotenv()
+settings = load_local_settings().snowflake
 
 connection_params = {
-    "account":  os.environ["SNOWFLAKE_ACCOUNT"],
-    "user":      os.environ["SNOWFLAKE_USER"],
-    "password":  os.environ["SNOWFLAKE_PASSWORD"],
-    "role":      os.environ["SNOWFLAKE_ROLE"],
-    "warehouse": os.environ["SNOWFLAKE_WAREHOUSE"],
-    "database":  os.environ["SNOWFLAKE_DATABASE"],
-    "schema":    os.environ["SNOWFLAKE_SCHEMA"]
+    "account": settings.account,
+    "user": settings.user,
+    "password": settings.password,
+    "role": settings.role,
+    "warehouse": settings.warehouse,
+    "database": settings.database,
+    "schema": settings.schema,
 }
 
 session = Session.builder.configs(connection_params).create()
