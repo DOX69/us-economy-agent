@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg"
+     width="1200" height="260" viewBox="0 0 1200 260"
+     role="img" aria-labelledby="title desc">
+  <title id="title">US Economy Agent pipeline</title>
+  <desc id="desc">Public BLS and Freddie Mac datasets are shaped into an auto-refreshing Dynamic Table, which a Streamlit app queries through Snowflake Cortex to return plain-English answers.</desc>
+
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M0,0 L10,5 L0,10 Z" fill="#5B9DFF"/>
+    </marker>
+  </defs>
+
+  <rect width="1200" height="260" rx="24" fill="#0B1220"/>
+
+  <text x="36" y="44" fill="#E6EDF3" font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif"
+        font-size="18" font-weight="600">How it works — from public data to a plain-English answer</text>
+
+  <!-- Nodes -->
+  <g font-family="-apple-system, BlinkMacSystemFont, Segoe UI, sans-serif">
+    <g transform="translate(36 80)">
+      <rect width="230" height="100" rx="14" fill="#131C2E" stroke="#1E2A3F"/>
+      <text x="20" y="38" fill="#E6EDF3" font-size="18" font-weight="700">Source data</text>
+      <text x="20" y="66" fill="#94A3B8" font-size="13">BLS + Freddie Mac</text>
+      <text x="20" y="86" fill="#94A3B8" font-size="13">public free datasets</text>
+    </g>
+    <g transform="translate(326 80)">
+      <rect width="230" height="100" rx="14" fill="#131C2E" stroke="#1E2A3F"/>
+      <text x="20" y="38" fill="#E6EDF3" font-size="18" font-weight="700">Dynamic Table</text>
+      <text x="20" y="66" fill="#94A3B8" font-size="13">ECONOMIC_DASHBOARD_LIVE</text>
+      <text x="20" y="86" fill="#94A3B8" font-size="13">auto-refreshing</text>
+    </g>
+    <g transform="translate(616 80)">
+      <rect width="230" height="100" rx="14" fill="#131C2E" stroke="#1E2A3F"/>
+      <text x="20" y="38" fill="#E6EDF3" font-size="18" font-weight="700">Streamlit app</text>
+      <text x="20" y="66" fill="#94A3B8" font-size="13">reads live table</text>
+      <text x="20" y="86" fill="#94A3B8" font-size="13">asks via Cortex</text>
+    </g>
+    <g transform="translate(906 80)">
+      <rect width="230" height="100" rx="14" fill="#131C2E" stroke="#1E2A3F"/>
+      <text x="20" y="38" fill="#E6EDF3" font-size="18" font-weight="700">Grounded answer</text>
+      <text x="20" y="66" fill="#94A3B8" font-size="13">analyst in plain English</text>
+      <text x="20" y="86" fill="#94A3B8" font-size="13">cites numbers &amp; dates</text>
+    </g>
+  </g>
+
+  <!-- Arrows -->
+  <g stroke="#5B9DFF" stroke-width="2" fill="none" marker-end="url(#arrow)">
+    <path d="M276,130 L312,130"/>
+    <path d="M566,130 L602,130"/>
+    <path d="M856,130 L892,130"/>
+  </g>
+
+  <text x="600" y="226" fill="#64748B" font-family="ui-monospace, SFMono-Regular, Menlo, monospace"
+        font-size="14" text-anchor="middle">prototype.py builds the Dynamic Table · streamlit_app.py serves the chat</text>
+</svg>
