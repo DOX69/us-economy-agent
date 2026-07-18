@@ -5,13 +5,13 @@
 
 ## What it is
 
-A conversational agent for US macroeconomic indicators. You ask in plain English — "What is the current unemployment rate?" or "How has inflation moved this year?" — and it answers from **live data** pulled into Snowflake, not from a model's memory.
+A conversational agent for US macroeconomic indicators. You ask in plain English — "What is the current unemployment rate?" or "How has inflation moved this year?" — and it answers from live Snowflake data, not from a model's memory.
 
 It is built on three Snowflake capabilities:
 
 - **Public free datasets** — BLS `FINANCIAL_ECONOMIC_INDICATORS_TIMESERIES` and Freddie Mac `FREDDIE_MAC_HOUSING_TIMESERIES`.
 - **Dynamic Tables** — `prototype.py` shapes the raw feeds into one auto-refreshing `ECONOMIC_DASHBOARD_LIVE` table.
-- **Cortex** — `streamlit_app.py` sends the live table plus your question to `SNOWFLAKE.CORTEX.COMPLETE`, which returns a concise answer that cites specific numbers and dates.
+- **Cortex** — `streamlit_app.py` sends 24 monthly snapshots plus the question to `AI_COMPLETE`.
 
 ## How it works
 
@@ -21,19 +21,19 @@ It is built on three Snowflake capabilities:
 </p>
 
 1. **Ingest** — `prototype.py` reads the two public tables with Snowpark and extracts CPI, the unemployment rate, and the 30-year mortgage rate.
-2. **Shape** — the three series are unioned, pivoted to one row per date, and promoted to a **Dynamic Table** that refreshes on a schedule.
-3. **Ask** — `streamlit_app.py` loads the latest 24 rows, shows three live metric tiles, and opens a chat. Each question is wrapped with the data and sent to Cortex.
-4. **Answer** — Cortex returns a short reply that formats rates as percentages (e.g. `4.1%`, not `0.041`) and quotes the underlying figures.
+2. **Shape** — the three series are unioned, pivoted to one row per date, and promoted to a Dynamic Table.
+3. **Ask** — `streamlit_app.py` loads 24 monthly snapshots, shows three live metric tiles, and opens a chat.
+4. **Answer** — accepted questions are grounded in those snapshots and sent to Cortex for a concise response.
 
-The agent also ships a second entry point, `ask_us_economy.py`, which uses **Cortex Analyst** against a Semantic View to turn a question into SQL, runs it with the Python connector, and prints the result.
+The second entry point, `ask_us_economy.py`, uses Cortex Analyst against a Semantic View to turn a question into SQL, runs it, and prints the result.
 
 ## Getting started
 
 ### Prerequisites
 
 - Python **3.13+** and [`uv`](https://docs.astral.sh/uv/)
-- A Snowflake account with **Cortex** access and a warehouse
-- Credentials for a role that can read the public datasets and create a Dynamic Table
+- A Snowflake account with Cortex access and a warehouse
+- Credentials for a role that can read the project data and use the quota table
 
 ### Install
 
@@ -43,21 +43,22 @@ uv sync
 
 ### Configure
 
-Copy the example env file and fill in your Snowflake connection:
+Create the local Streamlit secrets file from the tracked example:
 
 ```bash
-cp .env.example .env
+mkdir -p .streamlit
+cp .streamlit/secrets.example.toml .streamlit/secrets.toml
 ```
 
-| Variable | Purpose |
+Fill in `.streamlit/secrets.toml`. The same TOML content can be pasted into the app's **Secrets** page on Streamlit Community Cloud.
+
+| Setting | Purpose |
 | --- | --- |
-| `SNOWFLAKE_ACCOUNT` | Account identifier (`<org>-<account>`) |
-| `SNOWFLAKE_USER` / `SNOWFLAKE_PASSWORD` | Login credentials |
-| `SNOWFLAKE_ROLE` | Role used for the session |
-| `SNOWFLAKE_WAREHOUSE` | Compute warehouse |
-| `SNOWFLAKE_DATABASE` / `SNOWFLAKE_SCHEMA` | Target database and schema |
-| `SNOWFLAKE_SEMANTIC_VIEW` | Semantic View for the Cortex Analyst path |
-| `SNOWFLAKE_CONNECTION_TTL` | Cache TTL for the Streamlit connection |
+| `[connections.snowflake]` | Streamlit Snowflake connection credentials and session context |
+| `[cortex_analyst]` | Semantic View used by the Cortex Analyst CLI path |
+| `[app]` | Quotas, token limits, concurrency, cache and Cortex model |
+
+Before publishing the chat, run `sql/setup_quota.sql` and grant the app role `SELECT, UPDATE` on the table. The app fails closed if it cannot reserve a request before calling Cortex.
 
 ### Run the chat
 
@@ -65,7 +66,7 @@ cp .env.example .env
 uv run streamlit run streamlit_app.py
 ```
 
-Open the URL Streamlit prints, then ask about unemployment, CPI, or mortgage rates.
+Open the URL Streamlit prints, then ask about unemployment, CPI, inflation, or mortgage rates.
 
 ### Run the Cortex Analyst path
 
@@ -77,24 +78,33 @@ uv run python ask_us_economy.py
 
 | File | Role |
 | --- | --- |
-| `streamlit_app.py` | Chat UI + live metric tiles, backed by Cortex COMPLETE |
+| `streamlit_app.py` | Chat UI and live metric tiles |
+| `chat_service.py` | Request pipeline, session limit, duplicate handling and concurrency cap |
+| `snowflake_service.py` | Monthly query, atomic daily reservation and Cortex calls |
+| `app_config.py` | Typed configuration loaded from Streamlit TOML secrets |
 | `ask_us_economy.py` | Cortex Analyst → SQL → Python connector demo |
 | `prototype.py` | Snowpark ingestion that builds `ECONOMIC_DASHBOARD_LIVE` |
-| `cortex_response.py` | Parses Cortex Analyst message content; raises on errors |
-| `test_cortex_response.py` | Unit test for the parser's error handling |
-| `.env.example` | Template for required connection variables |
+| `cortex_response.py` | Cortex Analyst response parser |
+| `.streamlit/secrets.example.toml` | Safe local and Streamlit Cloud configuration template |
+| `sql/setup_quota.sql` | Idempotent daily quota table bootstrap |
 
-## How the chat stays grounded
+## Public usage guardrails
 
-The prompt sent to Cortex contains the actual rows from `ECONOMIC_DASHBOARD_LIVE` and explicit formatting rules, so answers stay tied to the data on screen:
+- 50 chargeable requests per UTC day globally, reserved atomically in Snowflake before Cortex.
+- 5 chargeable requests per browser session; reloading starts a new session but does not reset the daily limit.
+- 1,000 input characters, 3,000 full-prompt tokens and 1,000 output tokens by default.
+- At most 2 concurrent Cortex requests per app process.
+- Immediate duplicates, unsupported topics and non-English questions are rejected before Snowflake/Cortex work.
+- Only the last successful exchange is sent back to Cortex; accepted history remains visible in the current session.
 
-> You are a US economic data analyst. Answer using ONLY this data. Be concise. Cite specific numbers and dates. Always format rate value to percentage…
+All limits are configurable under `[app]`. There is no administrator bypass. Questions and answers are not persisted or logged.
 
 ## Limitations
 
-- Answers depend entirely on the Dynamic Table's refresh schedule — stale data means stale answers.
+- Answers depend on the Dynamic Table's refresh schedule — stale data means stale answers.
 - Requires Snowflake credentials and Cortex availability; there is no offline mode.
-- `ask_us_economy.py` needs a configured Semantic View; without it the parser raises rather than returning empty content.
+- Session allowance relies on Streamlit session state and resets on browser refresh; the Snowflake daily allowance remains authoritative.
+- `ask_us_economy.py` needs a configured Semantic View.
 
 ## License
 

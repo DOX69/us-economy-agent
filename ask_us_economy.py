@@ -1,21 +1,18 @@
-import os
-
-from dotenv import load_dotenv
 import requests
 import snowflake.connector
 
+from app_config import load_local_settings
 from cortex_response import extract_message_content
 
-load_dotenv()
-
-ACCOUNT   = os.getenv("SNOWFLAKE_ACCOUNT")
+settings = load_local_settings()
+ACCOUNT   = settings.snowflake.account
 HOST      = f"{ACCOUNT}.snowflakecomputing.com"
-USER      = os.getenv("SNOWFLAKE_USER")
-PASSWORD  = os.getenv("SNOWFLAKE_PASSWORD")
-SEMANTIC_VIEW = os.getenv("SNOWFLAKE_SEMANTIC_VIEW")
-WAREHOUSE = os.getenv("SNOWFLAKE_WAREHOUSE")
-DATABASE  = os.getenv("SNOWFLAKE_DATABASE")
-SCHEMA    = os.getenv("SNOWFLAKE_SCHEMA")
+USER      = settings.snowflake.user
+PASSWORD  = settings.snowflake.password
+SEMANTIC_VIEW = settings.cortex_analyst.semantic_view
+WAREHOUSE = settings.snowflake.warehouse
+DATABASE  = settings.snowflake.database
+SCHEMA    = settings.snowflake.schema
 
 # Step 1 - Get a session token for the REST API
 login = requests.post(
