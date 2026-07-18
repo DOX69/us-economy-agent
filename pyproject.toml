@@ -5,4 +5,5 @@ requires-python = ">=3.13"
 dependencies = [
     "python-dotenv>=1.2.2",
     "snowflake-snowpark-python>=1.53.1",
+    "streamlit>=1.59.2",
 ]
