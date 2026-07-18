@@ -1,0 +1,8 @@
+[project]
+name = "us-economy-agent"
+version = "0.1.0"
+requires-python = ">=3.13"
+dependencies = [
+    "python-dotenv>=1.2.2",
+    "snowflake-snowpark-python>=1.53.1",
+]
