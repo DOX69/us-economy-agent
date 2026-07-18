@@ -9,13 +9,13 @@ from snowflake.snowpark.types import DoubleType
 load_dotenv()
 
 connection_params = {
-    "account":   "BYDPCEQ-FQ19567",
-    "user":      "DOX69",
+    "account":  os.environ["SNOWFLAKE_ACCOUNT"],
+    "user":      os.environ["SNOWFLAKE_USER"],
     "password":  os.environ["SNOWFLAKE_PASSWORD"],
-    "role":      "ACCOUNTADMIN",
-    "warehouse": "COMPUTE_WH",
-    "database":  "ECON_AGENT_DB",
-    "schema":    "ANALYTICS"
+    "role":      os.environ["SNOWFLAKE_ROLE"],
+    "warehouse": os.environ["SNOWFLAKE_WAREHOUSE"],
+    "database":  os.environ["SNOWFLAKE_DATABASE"],
+    "schema":    os.environ["SNOWFLAKE_SCHEMA"]
 }
 
 session = Session.builder.configs(connection_params).create()
