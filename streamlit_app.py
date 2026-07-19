@@ -19,14 +19,14 @@ from src.streamlit_ui import (
 LOGGER = logging.getLogger(__name__)
 
 SUGGESTION_QUESTIONS = {
-    ":blue[:material/trending_up:] What's the latest unemployment rate?": (
-        "What is the current unemployment rate?"
+    ":blue[:material/trending_up:] When was the highest unemployment rate?": (
+        "When was the highest unemployment rate?"
     ),
     ":green[:material/payments:] How has inflation changed recently?": (
         "How has CPI changed over the last few months?"
     ),
-    ":orange[:material/home:] Current 30-year mortgage rate?": (
-        "What is the current 30-year mortgage rate?"
+    ":orange[:material/home:] 30-year mortgage rate of the beginning of the year vs. now?": (
+        "What is the 30-year mortgage rate at the beginning of the year vs. now?"
     ),
 }
 
