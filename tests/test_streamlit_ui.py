@@ -47,12 +47,22 @@ class RecordingPlaceholder:
     def __init__(self):
         self.empty_calls = 0
         self.metrics = []
+        self.metric_kwargs = {}
+        self.altair_charts = []
 
     def empty(self):
         self.empty_calls += 1
 
-    def metric(self, label, value):
+    def container(self, border=False):
+        return self
+
+    def metric(self, label, value, **kwargs):
         self.metrics.append((label, value))
+        self.metric_kwargs = kwargs
+
+    def altair_chart(self, chart, **kwargs):
+        self.altair_charts.append(chart)
+
 
 
 class RecordingStreamlit:
@@ -183,8 +193,8 @@ class StreamlitUiTests(unittest.TestCase):
         self.assertEqual(
             assistant.warnings,
             [
-                "Ask in English about unemployment, CPI/inflation, "
-                "or 30-year mortgage rates."
+                "I can only answer questions about unemployment,"
+                " inflation (CPI), or 30-year mortgage rates, in English."
             ],
         )
 

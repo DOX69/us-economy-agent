@@ -18,22 +18,40 @@ from src.streamlit_ui import (
 
 LOGGER = logging.getLogger(__name__)
 
+SUGGESTION_QUESTIONS = {
+    ":blue[:material/trending_up:] What's the latest unemployment rate?": (
+        "What is the current unemployment rate?"
+    ),
+    ":green[:material/payments:] How has inflation changed recently?": (
+        "How has CPI changed over the last few months?"
+    ),
+    ":orange[:material/home:] Current 30-year mortgage rate?": (
+        "What is the current 30-year mortgage rate?"
+    ),
+}
+
 
 @st.cache_resource
 def get_request_semaphore(max_concurrent_requests: int):
     return threading.BoundedSemaphore(max_concurrent_requests)
 
 
-st.set_page_config(page_title="Ask the US Economy", page_icon="📊")
+st.set_page_config(
+    page_title="Ask the US Economy",
+    page_icon=":material/query_stats:",
+)
 
 try:
     settings = load_settings(st.secrets)
 except (ConfigError, FileNotFoundError):
-    st.error("Application configuration is incomplete.")
+    st.error(
+        "Application configuration is incomplete.",
+        icon=":material/error:",
+    )
     st.stop()
 
-st.title("📊 Ask the US Economy")
-st.caption("Powered by Snowflake Cortex • Data: BLS & Freddie Mac")
+st.title("Ask the US economy")
+st.caption("Powered by Snowflake Cortex · Data: BLS & Freddie Mac")
 metric_placeholders = create_metric_placeholders()
 
 try:
@@ -48,7 +66,10 @@ try:
 except Exception:
     LOGGER.exception("monthly_data_load_failed")
     clear_metric_placeholders(metric_placeholders)
-    st.error("Economic data is temporarily unavailable.")
+    st.error(
+        "Economic data is temporarily unavailable.",
+        icon=":material/cloud_off:",
+    )
     st.stop()
 
 show_latest_metric(
@@ -59,17 +80,15 @@ show_latest_metric(
     lambda value: f"{value * 100:.1f}%",
 )
 show_latest_metric(
-    metric_placeholders[1], data, "CPI", "CPI Index", lambda value: f"{value:.1f}"
+    metric_placeholders[1], data, "CPI", "CPI index", lambda value: f"{value:.1f}"
 )
 show_latest_metric(
     metric_placeholders[2],
     data,
     "MORTGAGE_RATE_30Y",
-    "30Y Mortgage",
+    "30Y mortgage",
     lambda value: f"{value * 100:.2f}%",
 )
-
-st.divider()
 
 if "conversation_state" not in st.session_state:
     st.session_state.conversation_state = ConversationState()
@@ -79,12 +98,20 @@ for message in state.messages:
     with st.chat_message(message["role"]):
         st.markdown(message["content"])
 
+remaining = settings.app.session_allowance - state.chargeable_requests
+is_chat_disabled = state.daily_limit_reached or remaining <= 0
+
+if not state.messages:
+    selected = st.pills(
+        "Try asking:",
+        list(SUGGESTION_QUESTIONS.keys()),
+        label_visibility="collapsed",
+    )
+else:
+    selected = None
+
 st.caption(
-    f"Questions used: {state.chargeable_requests}/{settings.app.session_allowance}"
-)
-is_chat_disabled = (
-    state.daily_limit_reached
-    or state.chargeable_requests >= settings.app.session_allowance
+    f":material/chat: {remaining} question{'s' if remaining != 1 else ''} remaining"
 )
 
 question = get_chat_question(
@@ -92,6 +119,10 @@ question = get_chat_question(
     is_chat_disabled,
     settings.app.max_question_chars,
 )
+
+if selected and not question:
+    question = SUGGESTION_QUESTIONS[selected]
+
 if question:
     result, assistant_message = run_visible_chat_request(
         question,
@@ -122,5 +153,5 @@ if question:
         st.rerun()
     show_outcome(result, settings.app.max_question_chars, assistant_message)
 
-with st.expander("📋 View monthly data"):
+with st.expander("View monthly data", icon=":material/table_chart:"):
     st.dataframe(data, width="stretch")
