@@ -58,7 +58,7 @@ Fill in `.streamlit/secrets.toml`. The same TOML content can be pasted into the 
 | `[cortex_analyst]` | Semantic View used by the Cortex Analyst CLI path |
 | `[app]` | Quotas, token limits, concurrency, cache and Cortex model |
 
-Before publishing the chat, run `sql/setup_quota.sql` and grant the app role `SELECT, UPDATE` on the table. The app fails closed if it cannot reserve a request before calling Cortex.
+Before publishing the chat, run `sql/setup_quota.sql` with the owning role. It creates the quota table and grants `US_ECONOMY_APP_ROLE` the least-privilege access required for both quota writes and dashboard reads. The app fails closed if it cannot reserve a request before calling Cortex.
 
 ### Run the chat
 
