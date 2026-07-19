@@ -13,8 +13,8 @@ borderColor = "#334155"
 codeTextColor = "#CBD5E1"
 showWidgetBorder = true
 showSidebarBorder = true
-baseRadius = "6px"
-buttonRadius = "6px"
+baseRadius = "12px"
+buttonRadius = "12px"
 
 # Typography — Inter for readability
 font = "'Inter':https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap"
