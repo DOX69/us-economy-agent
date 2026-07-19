@@ -84,8 +84,8 @@ uv run python ask_us_economy.py
 | `src/services/chat_service.py` | Request pipeline, session limit, duplicate handling and concurrency cap |
 | `src/services/snowflake_service.py` | Monthly query, atomic daily reservation and Cortex calls |
 | `src/utils/cortex_response.py` | Cortex Analyst response parser |
-| `ask_us_economy.py` | Cortex Analyst → SQL → Python connector demo |
-| `prototype.py` | Snowpark ingestion that builds `ECONOMIC_DASHBOARD_LIVE` |
+| `scripts/ask_us_economy.py` | Cortex Analyst → SQL → Python connector demo |
+| `scripts/prototype.py` | Snowpark ingestion that builds `ECONOMIC_DASHBOARD_LIVE` |
 | `.streamlit/secrets.example.toml` | Safe local and Streamlit Cloud configuration template |
 | `sql/setup_quota.sql` | Idempotent daily quota table bootstrap |
 

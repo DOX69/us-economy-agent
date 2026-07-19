@@ -1,3 +1,7 @@
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
 from snowflake.snowpark import Session
 from snowflake.snowpark import functions as F
 from snowflake.snowpark.types import DoubleType
