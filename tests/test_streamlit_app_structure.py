@@ -22,3 +22,15 @@ def test_app_wires_the_responsive_ui_contract():
 
     missing = [snippet for snippet in expected_snippets if snippet not in source]
     assert not missing, f"Missing responsive UI wiring: {missing}"
+
+
+def test_conversation_container_precedes_composer_and_receives_pending_messages():
+    source = APP_SOURCE.read_text(encoding="utf-8")
+
+    conversation_position = source.index(
+        'conversation = st.container(key="conversation")'
+    )
+    composer_position = source.index('with st.container(key="chat-composer")')
+
+    assert conversation_position < composer_position
+    assert "run_visible_chat_request(\n                conversation," in source
