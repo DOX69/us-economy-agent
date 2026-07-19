@@ -148,4 +148,4 @@ if question:
     show_outcome(result, settings.app.max_question_chars)
 
 with st.expander("📋 View monthly data"):
-    st.dataframe(data, use_container_width=True)
+    st.dataframe(data, width="stretch")
