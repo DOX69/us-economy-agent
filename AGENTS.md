@@ -45,7 +45,7 @@ Toute tâche de développement doit se terminer par un résumé ou un document d
 * L'état du pipeline CI distant (GitHub Actions).
 
 ## 4. YAGNI (You Aren't Gonna Need It) : 
-Utilise /ponytail skill
+Préfère utiliser /ponytail skill si disponible.
 
 ## 5. When reporting information to me :
 Be extremely concise and sacrify grammar for the sake of concision.
