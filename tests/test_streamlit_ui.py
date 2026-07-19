@@ -1,5 +1,6 @@
 import unittest
 from decimal import Decimal
+from inspect import signature
 from unittest.mock import patch
 
 import pandas as pd
@@ -249,19 +250,30 @@ class StreamlitUiTests(unittest.TestCase):
 
     def test_renders_question_and_spinner_before_request(self):
         fake_st = RecordingStreamlit()
+        conversation = RecordingContext(fake_st.events, "conversation")
         expected_result = object()
 
         def request():
             fake_st.events.append(("request",))
             return expected_result
 
+        self.assertEqual(
+            list(signature(run_visible_chat_request).parameters),
+            ["container", "question", "request"],
+        )
+
         with patch("src.streamlit_ui.st", fake_st):
-            result, assistant = run_visible_chat_request("What is CPI?", request)
+            result, assistant = run_visible_chat_request(
+                conversation,
+                "What is CPI?",
+                request,
+            )
 
         self.assertIs(result, expected_result)
         self.assertEqual(
             fake_st.events,
             [
+                ("enter", "conversation"),
                 ("chat_message", "user"),
                 ("enter", "user"),
                 ("markdown", "What is CPI?"),
@@ -273,6 +285,7 @@ class StreamlitUiTests(unittest.TestCase):
                 ("request",),
                 ("exit", "spinner"),
                 ("exit", "assistant"),
+                ("exit", "conversation"),
             ],
         )
         self.assertEqual(assistant.name, "assistant")

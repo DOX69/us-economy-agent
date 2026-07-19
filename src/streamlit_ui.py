@@ -323,14 +323,19 @@ def render_suggestion_buttons():
 
 
 
-def run_visible_chat_request(question: str, request: Callable[[], Any]):
-    with st.chat_message("user"):
-        st.markdown(question)
+def run_visible_chat_request(
+    container,
+    question: str,
+    request: Callable[[], Any],
+):
+    with container:
+        with st.chat_message("user"):
+            st.markdown(question)
 
-    assistant = st.chat_message("assistant")
-    with assistant:
-        with st.spinner(ANALYSING_MESSAGE):
-            result = request()
+        assistant = st.chat_message("assistant")
+        with assistant:
+            with st.spinner(ANALYSING_MESSAGE):
+                result = request()
     return result, assistant
 
 

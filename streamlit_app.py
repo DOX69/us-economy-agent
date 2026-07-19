@@ -146,14 +146,16 @@ with chat_column:
         st.subheader("Ask a question")
         st.caption("Answers use the latest 24 monthly snapshots.")
 
-        for message in state.messages:
-            with st.chat_message(message["role"]):
-                st.markdown(message["content"])
-
         selected = None
         if not state.messages:
             st.caption("Try one of these")
             selected = render_suggestion_buttons()
+
+        conversation = st.container(key="conversation")
+        with conversation:
+            for message in state.messages:
+                with st.chat_message(message["role"]):
+                    st.markdown(message["content"])
 
         st.caption(f":material/chat: {session_allowance_caption(remaining)}")
         with st.container(key="chat-composer"):
@@ -168,6 +170,7 @@ with chat_column:
 
         if question:
             result, assistant_message = run_visible_chat_request(
+                conversation,
                 question,
                 lambda: handle_chat_request(
                     connection.session,
