@@ -4,7 +4,7 @@ import threading
 import streamlit as st
 
 from src.config.app_config import ConfigError, load_settings
-from src.services.chat_service import ChatOutcome, ChatService, ConversationState
+from src.services.chat_service import ChatOutcome, ConversationState, handle_chat_request
 from src.services.snowflake_service import MONTHLY_DATA_SQL
 
 
@@ -113,11 +113,14 @@ question = st.chat_input(
     max_chars=settings.app.max_question_chars,
 )
 if question:
-    service = ChatService(
+    result = handle_chat_request(
+        connection.session,
+        data,
+        state,
+        question,
         settings.app,
         get_request_semaphore(settings.app.max_concurrent_requests),
     )
-    result = service.submit(connection.session, data, state, question)
     st.session_state.conversation_state = result.state
 
     if result.error:

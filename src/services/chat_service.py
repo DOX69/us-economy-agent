@@ -60,81 +60,77 @@ class ChatResult:
     error: Exception | None = None
 
 
-class ChatService:
-    def __init__(self, settings: AppSettings, semaphore):
-        self.settings = settings
-        self.semaphore = semaphore
+def _reservation_failure(
+    state: ConversationState, reservation: ReservationResult
+) -> ChatResult:
+    outcomes = {
+        ReservationStatus.DAILY_LIMIT: ChatOutcome.DAILY_LIMIT,
+        ReservationStatus.PROMPT_TOO_LARGE: ChatOutcome.PROMPT_TOO_LARGE,
+        ReservationStatus.UNAVAILABLE: ChatOutcome.UNAVAILABLE,
+    }
+    if reservation.status == ReservationStatus.DAILY_LIMIT:
+        state = replace(state, daily_limit_reached=True)
+    return ChatResult(
+        outcomes[reservation.status], state, error=reservation.error
+    )
 
-    def submit(
-        self,
-        session_factory: Callable[[], "Session"],
-        data: Any,
-        state: ConversationState,
-        question: str,
-    ) -> ChatResult:
-        validation = validate_question(
-            question,
-            self.settings.max_question_chars,
-            state.last_exchange is not None,
+
+def handle_chat_request(
+    session_factory: Callable[[], "Session"],
+    data: Any,
+    state: ConversationState,
+    question: str,
+    settings: AppSettings,
+    semaphore,
+) -> ChatResult:
+    validation = validate_question(
+        question,
+        settings.max_question_chars,
+        state.last_exchange is not None,
+    )
+    if not validation.is_valid:
+        outcome = (
+            ChatOutcome.TOO_LONG
+            if validation.reason == "too_long"
+            else ChatOutcome.UNSUPPORTED_TOPIC
         )
-        if not validation.is_valid:
-            outcome = (
-                ChatOutcome.TOO_LONG
-                if validation.reason == "too_long"
-                else ChatOutcome.UNSUPPORTED_TOPIC
-            )
-            return ChatResult(outcome, state)
+        return ChatResult(outcome, state)
 
-        if state.last_exchange and is_duplicate_question(
-            question, state.last_exchange.question
-        ):
-            return ChatResult(ChatOutcome.DUPLICATE, state, state.last_exchange.answer)
-        if state.daily_limit_reached:
-            return ChatResult(ChatOutcome.DAILY_LIMIT, state)
-        if state.chargeable_requests >= self.settings.session_allowance:
-            return ChatResult(ChatOutcome.SESSION_LIMIT, state)
-        if not self.semaphore.acquire(blocking=False):
-            return ChatResult(ChatOutcome.BUSY, state)
+    if state.last_exchange and is_duplicate_question(
+        question, state.last_exchange.question
+    ):
+        return ChatResult(ChatOutcome.DUPLICATE, state, state.last_exchange.answer)
+    if state.daily_limit_reached:
+        return ChatResult(ChatOutcome.DAILY_LIMIT, state)
+    if state.chargeable_requests >= settings.session_allowance:
+        return ChatResult(ChatOutcome.SESSION_LIMIT, state)
+    if not semaphore.acquire(blocking=False):
+        return ChatResult(ChatOutcome.BUSY, state)
 
+    try:
+        prompt = build_prompt(data, question, state.last_exchange)
+        session = session_factory()
+        reservation = reserve_daily_allowance(session, settings, prompt)
+        if reservation.status != ReservationStatus.RESERVED:
+            return _reservation_failure(state, reservation)
+
+        charged = replace(
+            state, chargeable_requests=state.chargeable_requests + 1
+        )
         try:
-            prompt = build_prompt(data, question, state.last_exchange)
-            session = session_factory()
-            reservation = reserve_daily_allowance(session, self.settings, prompt)
-            if reservation.status != ReservationStatus.RESERVED:
-                return self._reservation_failure(state, reservation)
-
-            charged = replace(
-                state, chargeable_requests=state.chargeable_requests + 1
-            )
-            try:
-                answer = complete_answer(session, self.settings, prompt)
-            except Exception as error:
-                message = "The AI service is temporarily unavailable."
-                return ChatResult(
-                    ChatOutcome.CORTEX_ERROR,
-                    charged.with_error(question, message),
-                    message,
-                    error,
-                )
+            answer = complete_answer(session, settings, prompt)
+        except Exception as error:
+            message = "The AI service is temporarily unavailable."
             return ChatResult(
-                ChatOutcome.ANSWERED,
-                charged.with_answer(question, answer),
-                answer,
+                ChatOutcome.CORTEX_ERROR,
+                charged.with_error(question, message),
+                message,
+                error,
             )
-        finally:
-            self.semaphore.release()
-
-    @staticmethod
-    def _reservation_failure(
-        state: ConversationState, reservation: ReservationResult
-    ) -> ChatResult:
-        outcomes = {
-            ReservationStatus.DAILY_LIMIT: ChatOutcome.DAILY_LIMIT,
-            ReservationStatus.PROMPT_TOO_LARGE: ChatOutcome.PROMPT_TOO_LARGE,
-            ReservationStatus.UNAVAILABLE: ChatOutcome.UNAVAILABLE,
-        }
-        if reservation.status == ReservationStatus.DAILY_LIMIT:
-            state = replace(state, daily_limit_reached=True)
         return ChatResult(
-            outcomes[reservation.status], state, error=reservation.error
+            ChatOutcome.ANSWERED,
+            charged.with_answer(question, answer),
+            answer,
         )
+    finally:
+        semaphore.release()
