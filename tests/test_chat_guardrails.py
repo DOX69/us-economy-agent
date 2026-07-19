@@ -1,6 +1,6 @@
 import unittest
 
-from chat_guardrails import (
+from src.guardrails.chat_guardrails import (
     Exchange,
     build_prompt,
     is_duplicate_question,

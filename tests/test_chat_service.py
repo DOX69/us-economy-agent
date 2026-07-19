@@ -1,8 +1,8 @@
 import unittest
 
-from app_config import AppSettings
-from chat_service import ChatOutcome, ChatService, ConversationState
-from snowflake_service import ReservationResult, ReservationStatus
+from src.config.app_config import AppSettings
+from src.services.chat_service import ChatOutcome, ChatService, ConversationState
+from src.services.snowflake_service import ReservationResult, ReservationStatus
 
 
 class FakeSemaphore:

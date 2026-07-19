@@ -1,8 +1,8 @@
 import requests
 import snowflake.connector
 
-from app_config import load_local_settings
-from cortex_response import extract_message_content
+from src.config.app_config import load_local_settings
+from src.utils.cortex_response import extract_message_content
 
 settings = load_local_settings()
 ACCOUNT   = settings.snowflake.account

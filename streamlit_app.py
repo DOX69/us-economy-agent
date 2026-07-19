@@ -3,9 +3,9 @@ import threading
 
 import streamlit as st
 
-from app_config import ConfigError, load_settings
-from chat_service import ChatOutcome, ChatService, ConversationState
-from snowflake_service import (
+from src.config.app_config import ConfigError, load_settings
+from src.services.chat_service import ChatOutcome, ChatService, ConversationState
+from src.services.snowflake_service import (
     MONTHLY_DATA_SQL,
     complete_answer,
     reserve_daily_allowance,

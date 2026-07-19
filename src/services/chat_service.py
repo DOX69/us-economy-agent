@@ -2,9 +2,9 @@ from dataclasses import dataclass, field, replace
 from enum import Enum
 from typing import Callable
 
-from app_config import AppSettings
-from chat_guardrails import Exchange, build_prompt, is_duplicate_question, validate_question
-from snowflake_service import ReservationResult, ReservationStatus
+from src.config.app_config import AppSettings
+from src.guardrails.chat_guardrails import Exchange, build_prompt, is_duplicate_question, validate_question
+from src.services.snowflake_service import ReservationResult, ReservationStatus
 
 
 class ChatOutcome(Enum):

@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app_config import ConfigError, load_local_settings, load_settings
+from src.config.app_config import ConfigError, load_local_settings, load_settings
 
 
 VALID_SECRETS = {

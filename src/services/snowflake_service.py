@@ -3,7 +3,7 @@ from enum import Enum
 import json
 import re
 
-from app_config import AppSettings
+from src.config.app_config import AppSettings
 
 
 MONTHLY_DATA_SQL = """

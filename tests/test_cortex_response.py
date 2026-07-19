@@ -1,6 +1,6 @@
 import unittest
 
-from cortex_response import extract_message_content
+from src.utils.cortex_response import extract_message_content
 
 
 class ExtractMessageContentTests(unittest.TestCase):
