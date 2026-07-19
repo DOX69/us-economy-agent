@@ -53,8 +53,17 @@ def is_duplicate_question(question: str, previous_question: str | None) -> bool:
 
 
 def build_prompt(
-    data_csv: str, question: str, previous_exchange: Exchange | None = None
+    data, question: str, previous_exchange: Exchange | None = None
 ) -> str:
+    if hasattr(data, "to_csv"):
+        data_csv = (
+            data.sort_values("MONTH", ascending=False)
+            .to_csv(index=False, date_format="%Y-%m", na_rep="")
+            .strip()
+        )
+    else:
+        data_csv = str(data)
+
     context = ""
     if previous_exchange:
         context = (

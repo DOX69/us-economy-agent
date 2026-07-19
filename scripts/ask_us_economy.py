@@ -6,7 +6,14 @@ import requests
 import snowflake.connector
 
 from src.config.app_config import load_local_settings
-from src.utils.cortex_response import extract_message_content
+
+
+def extract_message_content(data):
+    message = data.get("message", {})
+    if isinstance(message, str):
+        raise RuntimeError(message)
+    return message.get("content", [])
+
 
 settings = load_local_settings()
 ACCOUNT   = settings.snowflake.account

@@ -113,16 +113,11 @@ question = st.chat_input(
     max_chars=settings.app.max_question_chars,
 )
 if question:
-    data_csv = (
-        data.sort_values("MONTH", ascending=False)
-        .to_csv(index=False, date_format="%Y-%m", na_rep="")
-        .strip()
-    )
     service = ChatService(
         settings.app,
         get_request_semaphore(settings.app.max_concurrent_requests),
     )
-    result = service.submit(connection.session, data_csv, state, question)
+    result = service.submit(connection.session, data, state, question)
     st.session_state.conversation_state = result.state
 
     if result.error:

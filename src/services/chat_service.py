@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import TYPE_CHECKING, Callable
+from typing import TYPE_CHECKING, Callable, Any
 
 from src.config.app_config import AppSettings
 from src.guardrails.chat_guardrails import Exchange, build_prompt, is_duplicate_question, validate_question
@@ -68,7 +68,7 @@ class ChatService:
     def submit(
         self,
         session_factory: Callable[[], "Session"],
-        data_csv: str,
+        data: Any,
         state: ConversationState,
         question: str,
     ) -> ChatResult:
@@ -97,7 +97,7 @@ class ChatService:
             return ChatResult(ChatOutcome.BUSY, state)
 
         try:
-            prompt = build_prompt(data_csv, question, state.last_exchange)
+            prompt = build_prompt(data, question, state.last_exchange)
             session = session_factory()
             reservation = reserve_daily_allowance(session, self.settings, prompt)
             if reservation.status != ReservationStatus.RESERVED:
