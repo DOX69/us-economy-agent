@@ -1,4 +1,5 @@
 import unittest
+from unittest.mock import patch
 
 from src.config.app_config import AppSettings
 from src.services.chat_service import ChatOutcome, ChatService, ConversationState
@@ -21,70 +22,74 @@ class FakeSemaphore:
 class ChatServiceTests(unittest.TestCase):
     def setUp(self):
         self.settings = AppSettings()
-        self.reserve_calls = 0
-        self.complete_calls = 0
+        self.reserve_patch = patch(
+            "src.services.chat_service.reserve_daily_allowance"
+        )
+        self.complete_patch = patch("src.services.chat_service.complete_answer")
+        self.reserve_mock = self.reserve_patch.start()
+        self.complete_mock = self.complete_patch.start()
+        self.reserve_mock.return_value = ReservationResult(ReservationStatus.RESERVED)
+        self.complete_mock.return_value = "Answer"
 
-    def service(self, reservation=ReservationStatus.RESERVED, answer="Answer"):
-        def reserve(_session, _settings, _prompt):
-            self.reserve_calls += 1
-            return ReservationResult(reservation)
+    def tearDown(self):
+        self.reserve_patch.stop()
+        self.complete_patch.stop()
 
-        def complete(_session, _settings, _prompt):
-            self.complete_calls += 1
-            if isinstance(answer, Exception):
-                raise answer
-            return answer
-
+    def service(self):
         semaphore = FakeSemaphore()
-        return ChatService(self.settings, semaphore, reserve, complete), semaphore
+        return ChatService(self.settings, semaphore), semaphore
 
     def test_rejected_question_consumes_nothing(self):
         service, semaphore = self.service()
         state = ConversationState()
-        session_calls = []
+        session = object()
 
-        result = service.submit(
-            lambda: session_calls.append("called"), "csv", state, "Write a poem"
-        )
+        result = service.submit(session, "csv", state, "Write a poem")
 
         self.assertEqual(result.outcome, ChatOutcome.UNSUPPORTED_TOPIC)
         self.assertEqual(result.state.chargeable_requests, 0)
-        self.assertEqual(self.reserve_calls, 0)
+        self.reserve_mock.assert_not_called()
         self.assertEqual(semaphore.releases, 0)
-        self.assertEqual(session_calls, [])
 
     def test_immediate_duplicate_reuses_existing_answer(self):
         service, _ = self.service()
         state = ConversationState().with_answer("What is CPI?", "CPI is 320.")
+        session = object()
 
-        result = service.submit(None, "csv", state, " what  is cpi? ")
+        result = service.submit(session, "csv", state, " what  is cpi? ")
 
         self.assertEqual(result.outcome, ChatOutcome.DUPLICATE)
         self.assertEqual(result.message, "CPI is 320.")
-        self.assertEqual(self.reserve_calls, 0)
+        self.reserve_mock.assert_not_called()
 
     def test_session_limit_blocks_before_snowflake(self):
         service, _ = self.service()
         state = ConversationState(chargeable_requests=5)
+        session = object()
 
-        result = service.submit(None, "csv", state, "What is CPI?")
+        result = service.submit(session, "csv", state, "What is CPI?")
 
         self.assertEqual(result.outcome, ChatOutcome.SESSION_LIMIT)
-        self.assertEqual(self.reserve_calls, 0)
+        self.reserve_mock.assert_not_called()
 
     def test_busy_request_does_not_reserve_quota(self):
         service, semaphore = self.service()
         semaphore.available = False
+        session = object()
 
-        result = service.submit(None, "csv", ConversationState(), "What is CPI?")
+        result = service.submit(session, "csv", ConversationState(), "What is CPI?")
 
         self.assertEqual(result.outcome, ChatOutcome.BUSY)
-        self.assertEqual(self.reserve_calls, 0)
+        self.reserve_mock.assert_not_called()
 
     def test_daily_limit_is_remembered_without_session_charge(self):
-        service, semaphore = self.service(ReservationStatus.DAILY_LIMIT)
+        service, semaphore = self.service()
+        self.reserve_mock.return_value = ReservationResult(
+            ReservationStatus.DAILY_LIMIT
+        )
+        session = object()
 
-        result = service.submit(None, "csv", ConversationState(), "What is CPI?")
+        result = service.submit(session, "csv", ConversationState(), "What is CPI?")
 
         self.assertEqual(result.outcome, ChatOutcome.DAILY_LIMIT)
         self.assertTrue(result.state.daily_limit_reached)
@@ -92,9 +97,11 @@ class ChatServiceTests(unittest.TestCase):
         self.assertEqual(semaphore.releases, 1)
 
     def test_cortex_failure_consumes_quota_but_not_context(self):
-        service, semaphore = self.service(answer=RuntimeError("failure"))
+        service, semaphore = self.service()
+        self.complete_mock.side_effect = RuntimeError("failure")
+        session = object()
 
-        result = service.submit(None, "csv", ConversationState(), "What is CPI?")
+        result = service.submit(session, "csv", ConversationState(), "What is CPI?")
 
         self.assertEqual(result.outcome, ChatOutcome.CORTEX_ERROR)
         self.assertEqual(result.state.chargeable_requests, 1)
@@ -102,23 +109,23 @@ class ChatServiceTests(unittest.TestCase):
         self.assertEqual(semaphore.releases, 1)
 
     def test_success_records_answer_and_context(self):
-        service, semaphore = self.service(answer="CPI is 320.")
+        service, semaphore = self.service()
+        self.complete_mock.return_value = "CPI is 320."
         session = object()
-        session_calls = []
 
-        result = service.submit(
-            lambda: session_calls.append("called") or session,
-            "csv",
-            ConversationState(),
-            "What is CPI?",
-        )
+        result = service.submit(session, "csv", ConversationState(), "What is CPI?")
 
         self.assertEqual(result.outcome, ChatOutcome.ANSWERED)
         self.assertEqual(result.state.chargeable_requests, 1)
         self.assertEqual(result.state.last_exchange.answer, "CPI is 320.")
         self.assertEqual(len(result.state.messages), 2)
         self.assertEqual(semaphore.releases, 1)
-        self.assertEqual(session_calls, ["called"])
+        self.reserve_mock.assert_called_once()
+        self.assertEqual(self.reserve_mock.call_args.args[0], session)
+        self.assertEqual(self.reserve_mock.call_args.args[1], self.settings)
+        self.complete_mock.assert_called_once()
+        self.assertEqual(self.complete_mock.call_args.args[0], session)
+        self.assertEqual(self.complete_mock.call_args.args[1], self.settings)
 
 
 if __name__ == "__main__":

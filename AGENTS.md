@@ -43,3 +43,9 @@ Toute tâche de développement doit se terminer par un résumé ou un document d
 * La preuve d'exécution réussie de `pytest`.
 * La preuve visuelle (logs et capture d'écran intégrée) montrant l'application Streamlit fonctionnelle en local.
 * L'état du pipeline CI distant (GitHub Actions).
+
+## 4. YAGNI (You Aren't Gonna Need It) : 
+Utilise /ponytail skill
+
+## 5. When reporting information to me :
+Be extremely concise and sacrify grammar for the sake of concision.

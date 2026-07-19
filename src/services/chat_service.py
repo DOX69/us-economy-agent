@@ -1,10 +1,18 @@
 from dataclasses import dataclass, field, replace
 from enum import Enum
-from typing import Callable
+from typing import TYPE_CHECKING
 
 from src.config.app_config import AppSettings
 from src.guardrails.chat_guardrails import Exchange, build_prompt, is_duplicate_question, validate_question
-from src.services.snowflake_service import ReservationResult, ReservationStatus
+from src.services.snowflake_service import (
+    ReservationResult,
+    ReservationStatus,
+    complete_answer,
+    reserve_daily_allowance,
+)
+
+if TYPE_CHECKING:
+    from snowflake.snowpark import Session
 
 
 class ChatOutcome(Enum):
@@ -53,20 +61,12 @@ class ChatResult:
 
 
 class ChatService:
-    def __init__(
-        self,
-        settings: AppSettings,
-        semaphore,
-        reserve: Callable,
-        complete: Callable,
-    ):
+    def __init__(self, settings: AppSettings, semaphore):
         self.settings = settings
         self.semaphore = semaphore
-        self.reserve = reserve
-        self.complete = complete
 
     def submit(
-        self, session_or_factory, data_csv: str, state: ConversationState, question: str
+        self, session: "Session", data_csv: str, state: ConversationState, question: str
     ) -> ChatResult:
         validation = validate_question(
             question,
@@ -94,12 +94,7 @@ class ChatService:
 
         try:
             prompt = build_prompt(data_csv, question, state.last_exchange)
-            session = (
-                session_or_factory()
-                if callable(session_or_factory)
-                else session_or_factory
-            )
-            reservation = self.reserve(session, self.settings, prompt)
+            reservation = reserve_daily_allowance(session, self.settings, prompt)
             if reservation.status != ReservationStatus.RESERVED:
                 return self._reservation_failure(state, reservation)
 
@@ -107,7 +102,7 @@ class ChatService:
                 state, chargeable_requests=state.chargeable_requests + 1
             )
             try:
-                answer = self.complete(session, self.settings, prompt)
+                answer = complete_answer(session, self.settings, prompt)
             except Exception as error:
                 message = "The AI service is temporarily unavailable."
                 return ChatResult(

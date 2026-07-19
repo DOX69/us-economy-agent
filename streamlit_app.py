@@ -5,11 +5,7 @@ import streamlit as st
 
 from src.config.app_config import ConfigError, load_settings
 from src.services.chat_service import ChatOutcome, ChatService, ConversationState
-from src.services.snowflake_service import (
-    MONTHLY_DATA_SQL,
-    complete_answer,
-    reserve_daily_allowance,
-)
+from src.services.snowflake_service import MONTHLY_DATA_SQL
 
 
 LOGGER = logging.getLogger(__name__)
@@ -125,8 +121,6 @@ if question:
     service = ChatService(
         settings.app,
         get_request_semaphore(settings.app.max_concurrent_requests),
-        reserve_daily_allowance,
-        complete_answer,
     )
     result = service.submit(connection.session, data_csv, state, question)
     st.session_state.conversation_state = result.state
