@@ -1,7 +1,7 @@
 import unittest
 
-from app_config import AppSettings
-from snowflake_service import (
+from src.config.app_config import AppSettings
+from src.services.snowflake_service import (
     MONTHLY_DATA_SQL,
     ReservationStatus,
     complete_answer,

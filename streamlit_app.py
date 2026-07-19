@@ -3,12 +3,16 @@ import threading
 
 import streamlit as st
 
-from app_config import ConfigError, load_settings
-from chat_service import ChatOutcome, ChatService, ConversationState
-from snowflake_service import (
-    MONTHLY_DATA_SQL,
-    complete_answer,
-    reserve_daily_allowance,
+from src.config.app_config import ConfigError, load_settings
+from src.services.chat_service import ChatOutcome, ConversationState, handle_chat_request
+from src.services.snowflake_service import MONTHLY_DATA_SQL
+from src.streamlit_ui import (
+    clear_metric_placeholders,
+    create_metric_placeholders,
+    get_chat_question,
+    run_visible_chat_request,
+    show_latest_metric,
+    show_outcome,
 )
 
 
@@ -20,35 +24,6 @@ def get_request_semaphore(max_concurrent_requests: int):
     return threading.BoundedSemaphore(max_concurrent_requests)
 
 
-def show_latest_metric(container, data, column, label, formatter):
-    available = data.dropna(subset=[column])
-    if not available.empty:
-        container.metric(label, formatter(available.iloc[0][column]))
-
-
-def show_outcome(result, max_question_chars):
-    messages = {
-        ChatOutcome.TOO_LONG: (
-            f"Keep your question under {max_question_chars:,} characters."
-        ),
-        ChatOutcome.UNSUPPORTED_TOPIC: (
-            "Ask in English about unemployment, CPI/inflation, or 30-year mortgage rates."
-        ),
-        ChatOutcome.DUPLICATE: "This question was already answered above.",
-        ChatOutcome.SESSION_LIMIT: "You have used all questions for this session.",
-        ChatOutcome.BUSY: "The public demo is busy. Please try again shortly.",
-        ChatOutcome.DAILY_LIMIT: (
-            "The public demo has reached today's AI allowance. Try again after 00:00 UTC."
-        ),
-        ChatOutcome.PROMPT_TOO_LARGE: (
-            "This follow-up needs too much context. Ask it as a standalone question."
-        ),
-        ChatOutcome.UNAVAILABLE: "The AI service is temporarily unavailable.",
-    }
-    if result.outcome in messages:
-        st.warning(messages[result.outcome])
-
-
 st.set_page_config(page_title="Ask the US Economy", page_icon="📊")
 
 try:
@@ -56,6 +31,10 @@ try:
 except (ConfigError, FileNotFoundError):
     st.error("Application configuration is incomplete.")
     st.stop()
+
+st.title("📊 Ask the US Economy")
+st.caption("Powered by Snowflake Cortex • Data: BLS & Freddie Mac")
+metric_placeholders = create_metric_placeholders()
 
 try:
     connection = st.connection(
@@ -68,25 +47,22 @@ try:
     )
 except Exception:
     LOGGER.exception("monthly_data_load_failed")
+    clear_metric_placeholders(metric_placeholders)
     st.error("Economic data is temporarily unavailable.")
     st.stop()
 
-st.title("📊 Ask the US Economy")
-st.caption("Powered by Snowflake Cortex • Data: BLS & Freddie Mac")
-
-column_one, column_two, column_three = st.columns(3)
 show_latest_metric(
-    column_one,
+    metric_placeholders[0],
     data,
     "UNEMPLOYMENT_RATE",
     "Unemployment",
     lambda value: f"{value * 100:.1f}%",
 )
 show_latest_metric(
-    column_two, data, "CPI", "CPI Index", lambda value: f"{value:.1f}"
+    metric_placeholders[1], data, "CPI", "CPI Index", lambda value: f"{value:.1f}"
 )
 show_latest_metric(
-    column_three,
+    metric_placeholders[2],
     data,
     "MORTGAGE_RATE_30Y",
     "30Y Mortgage",
@@ -111,24 +87,23 @@ is_chat_disabled = (
     or state.chargeable_requests >= settings.app.session_allowance
 )
 
-question = st.chat_input(
+question = get_chat_question(
     "Ask about unemployment, inflation, or mortgage rates...",
-    disabled=is_chat_disabled,
-    max_chars=settings.app.max_question_chars,
+    is_chat_disabled,
+    settings.app.max_question_chars,
 )
 if question:
-    data_csv = (
-        data.sort_values("MONTH", ascending=False)
-        .to_csv(index=False, date_format="%Y-%m", na_rep="")
-        .strip()
+    result, assistant_message = run_visible_chat_request(
+        question,
+        lambda: handle_chat_request(
+            connection.session,
+            data,
+            state,
+            question,
+            settings.app,
+            get_request_semaphore(settings.app.max_concurrent_requests),
+        ),
     )
-    service = ChatService(
-        settings.app,
-        get_request_semaphore(settings.app.max_concurrent_requests),
-        reserve_daily_allowance,
-        complete_answer,
-    )
-    result = service.submit(connection.session, data_csv, state, question)
     st.session_state.conversation_state = result.state
 
     if result.error:
@@ -145,7 +120,7 @@ if question:
         )
     if result.outcome in (ChatOutcome.ANSWERED, ChatOutcome.CORTEX_ERROR):
         st.rerun()
-    show_outcome(result, settings.app.max_question_chars)
+    show_outcome(result, settings.app.max_question_chars, assistant_message)
 
 with st.expander("📋 View monthly data"):
-    st.dataframe(data, use_container_width=True)
+    st.dataframe(data, width="stretch")

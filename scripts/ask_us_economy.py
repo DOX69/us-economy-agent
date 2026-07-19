@@ -1,8 +1,19 @@
+import sys
+from pathlib import Path
+sys.path.append(str(Path(__file__).resolve().parent.parent))
+
 import requests
 import snowflake.connector
 
-from app_config import load_local_settings
-from cortex_response import extract_message_content
+from src.config.app_config import load_local_settings
+
+
+def extract_message_content(data):
+    message = data.get("message", {})
+    if isinstance(message, str):
+        raise RuntimeError(message)
+    return message.get("content", [])
+
 
 settings = load_local_settings()
 ACCOUNT   = settings.snowflake.account

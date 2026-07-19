@@ -6,3 +6,9 @@ dependencies = [
     "snowflake-snowpark-python>=1.53.1",
     "streamlit>=1.59.2",
 ]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+]
+
